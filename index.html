@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1B2F5B">
+<title>Libreta de fiados</title>
+<style>
+:root{--papel:#F6F9FC;--regla:#CFE0F1;--tinta:#1B2F5B;--suave:#5E6F8F;--margen:#D9544F;--pago:#2F7D5B;--marca:#FFE66D;--blanco:#fff}
+@media(prefers-color-scheme:dark){:root{--papel:#121A2B;--regla:#26385A;--tinta:#E8EEF9;--suave:#93A3C2;--margen:#FF7A74;--pago:#5FD39B;--marca:#6B5C14;--blanco:#1A2540}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:"Avenir Next","Segoe UI",system-ui,sans-serif;color:var(--tinta);background-color:var(--papel);
+ background-image:repeating-linear-gradient(to bottom,transparent 0 31px,var(--regla) 31px 32px);
+ min-height:100vh;padding:0 16px 96px 34px;font-size:17px;line-height:32px}
+body::before{content:"";position:fixed;top:0;bottom:0;left:22px;width:2px;background:var(--margen);opacity:.55}
+button,input{font:inherit;color:inherit}
+h1,h2{margin:0;line-height:1.2}
+.num{font-variant-numeric:tabular-nums;font-weight:800}
+.oculto{display:none!important}
+.banda{background:var(--marca);color:var(--tinta);margin:0 -16px 0 -34px;padding:0 16px;font-weight:700;font-size:14px;line-height:28px;text-align:center}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 0 4px;line-height:1.2}
+header small{color:var(--suave)}
+.total{padding:8px 0 4px;line-height:1.15}
+.total span{color:var(--suave);font-size:15px;display:block}
+.total b{font-size:42px;font-weight:800;background:linear-gradient(transparent 55%,var(--marca) 55% 92%,transparent 92%);padding:0 6px;margin-left:-6px;font-variant-numeric:tabular-nums}
+input{width:100%;border:0;border-bottom:2px solid var(--tinta);background:transparent;padding:6px 2px;border-radius:0;outline:none;line-height:1.3}
+input:focus{border-bottom-color:var(--margen)}
+label{display:block;font-size:14px;color:var(--suave);margin-top:10px}
+.btn{border:2px solid var(--tinta);background:var(--tinta);color:var(--papel);border-radius:8px;padding:10px 18px;font-weight:700;cursor:pointer;line-height:1.2;min-height:48px}
+.btn.sec{background:transparent;color:var(--tinta)}
+.btn.rojo{background:var(--margen);border-color:var(--margen);color:#fff}
+.btn.verde{background:var(--pago);border-color:var(--pago);color:#fff}
+.btn:disabled{opacity:.5}
+:focus-visible{outline:3px solid var(--margen);outline-offset:2px}
+.fila{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--regla);padding:8px 0;min-height:64px;cursor:pointer;line-height:1.25}
+.fila small{display:block;color:var(--suave);font-size:14px}
+.deuda{color:var(--margen)}.cero{color:var(--suave)}
+.acciones{display:flex;gap:10px;margin:12px 0}.acciones .btn{flex:1}
+.mes{margin:18px 0 0;font-weight:800;border-bottom:2px solid var(--tinta)}
+.mov{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--regla);line-height:1.3}
+.mov small{display:block;color:var(--suave);font-size:13px}
+.mov.anul{opacity:.5;text-decoration:line-through}
+.mov .x{background:none;border:0;color:var(--margen);font-size:13px;cursor:pointer;padding:0;text-decoration:underline}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--tinta);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;color:var(--papel);opacity:.65;padding:14px 0;font-weight:700;cursor:pointer}
+nav button.on{opacity:1;box-shadow:inset 0 -4px 0 var(--marca)}
+dialog{border:2px solid var(--tinta);border-radius:12px;background:var(--papel);color:var(--tinta);width:min(92vw,420px);padding:18px;line-height:1.4}
+dialog::backdrop{background:rgba(10,20,40,.55)}
+.toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);background:var(--tinta);color:var(--papel);padding:10px 16px;border-radius:8px;font-size:15px;line-height:1.3;max-width:88vw;z-index:9}
+.ver{position:fixed;right:8px;bottom:62px;font-size:10px;opacity:.35;line-height:1}
+.err{color:var(--margen);min-height:32px;font-size:15px}
+.kv{display:flex;justify-content:space-between;border-bottom:1px solid var(--regla)}
+</style>
+</head>
+<body>
+<div id="login">
+  <h1 style="padding-top:48px;font-size:32px">Libreta de fiados</h1>
+  <label for="u">Usuario</label><input id="u" autocomplete="username" autocapitalize="none">
+  <label for="p">PIN</label><input id="p" type="password" inputmode="numeric" autocomplete="current-password">
+  <div class="err" id="lerr"></div>
+  <button class="btn" id="entrar" style="width:100%">Entrar</button>
+</div>
+
+<div id="app" class="oculto">
+  <div class="banda oculto" id="banda">MODO PRUEBAS · planilla de desarrollo</div>
+  <header><div><h2 id="quien"></h2><small id="rol"></small></div><button class="btn sec" id="sync" aria-label="Actualizar datos">Actualizar</button></header>
+  <main id="main"></main>
+  <nav><button data-v="clientes" class="on">Clientes</button><button data-v="resumen" id="nResumen">Resumen</button><button data-v="mas">Más</button></nav>
+</div>
+
+<dialog id="dMov">
+  <h2 id="dMovT"></h2>
+  <label for="mMonto">Monto en pesos</label><input id="mMonto" type="number" inputmode="numeric" min="1">
+  <label for="mNota">Detalle (opcional)</label><input id="mNota" placeholder="Ej.: pan y bebidas">
+  <label for="mFecha">Fecha</label><input id="mFecha" type="date">
+  <div class="acciones"><button class="btn sec" data-cerrar>Cancelar</button><button class="btn" id="mOk">Guardar</button></div>
+</dialog>
+<dialog id="dCli">
+  <h2>Nuevo cliente</h2>
+  <label for="cNom">Nombre</label><input id="cNom" autocomplete="off">
+  <label for="cTel">Teléfono (opcional)</label><input id="cTel" type="tel">
+  <div class="acciones"><button class="btn sec" data-cerrar>Cancelar</button><button class="btn" id="cOk">Agregar cliente</button></div>
+</dialog>
+<div class="ver" id="ver"></div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbxllJBA5Y7-Et9BXc0j89havJ4T8YAtGjqq4L2AiA8x2WZ8kiFO7-zO8HaTa2QkfjHq3Q/exec';
+const VERSION = 1;
+const S = { u: '', pin: '', nombre: '', rol: '', cl: [], mv: [], vista: 'clientes', sel: null };
+const $ = s => document.querySelector(s);
+const clp = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString('es-CL');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const hoy = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
+const esJefe = () => S.rol === 'jefe' || S.rol === 'dev';
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const nombreMes = m => MESES[+m.slice(5) - 1] + ' ' + m.slice(0, 4);
+
+function toast(t) { const e = document.createElement('div'); e.className = 'toast'; e.textContent = t; document.body.append(e); setTimeout(() => e.remove(), 3200); }
+
+async function api(accion, datos = {}) {
+  let j;
+  try {
+    const r = await fetch(API, { method: 'POST', body: JSON.stringify({ usuario: S.u, pin: S.pin, accion, ...datos }) });
+    j = await r.json();
+  } catch (e) { throw new Error('No hay conexión con la planilla. Revisa el internet e intenta de nuevo.'); }
+  if (!j.ok) throw new Error(j.error);
+  return j;
+}
+
+async function cargar() {
+  const j = await api('datos');
+  Object.assign(S, { nombre: j.nombre, rol: j.rol, cl: j.clientes, mv: j.movimientos });
+  render();
+}
+
+function saldos() {
+  const m = {};
+  S.mv.filter(x => !x.anulado).forEach(x => m[x.clienteId] = (m[x.clienteId] || 0) + (x.tipo === 'fiado' ? 1 : -1) * Number(x.monto));
+  return m;
+}
+
+function render() {
+  $('#quien').textContent = S.nombre;
+  $('#rol').textContent = { jefe: 'Jefe', empleado: 'Empleado', dev: 'Desarrollo' }[S.rol];
+  $('#banda').classList.toggle('oculto', S.rol !== 'dev');
+  $('#nResumen').classList.toggle('oculto', !esJefe());
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === S.vista));
+  const f = { clientes: vClientes, detalle: vDetalle, resumen: vResumen, mas: vMas }[S.vista];
+  $('#main').innerHTML = f();
+}
+
+function vClientes() {
+  const s = saldos(), q = (window._q || '').toLowerCase();
+  const total = Object.values(s).reduce((a, b) => a + b, 0);
+  const lista = S.cl.filter(c => c.nombre.toLowerCase().includes(q)).sort((a, b) => (s[b.id] || 0) - (s[a.id] || 0) || a.nombre.localeCompare(b.nombre));
+  return `<div class="total"><span>Total que nos deben</span><b>${clp(total)}</b></div>
+  <div style="display:flex;gap:10px;align-items:end"><div style="flex:1"><label for="q">Buscar cliente</label><input id="q" value="${esc(window._q || '')}" oninput="window._q=this.value;pintaLista()"></div>
+  <button class="btn" onclick="abrirCli()">+ Cliente</button></div>
+  <div id="lista">${filas(lista, s)}</div>`;
+}
+function filas(lista, s) {
+  if (!lista.length) return `<p style="color:var(--suave)">${S.cl.length ? 'Ningún cliente coincide.' : 'Aún no hay clientes. Toca «+ Cliente» para agregar el primero.'}</p>`;
+  return lista.map(c => { const v = s[c.id] || 0; return `<button class="fila" onclick="abrir('${c.id}')"><span>${esc(c.nombre)}<small>${c.telefono ? esc(c.telefono) : ''}</small></span><span class="num ${v > 0 ? 'deuda' : 'cero'}">${v > 0 ? clp(v) : 'Al día'}</span></button>`; }).join('');
+}
+function pintaLista() { const s = saldos(), q = window._q.toLowerCase(); $('#lista').innerHTML = filas(S.cl.filter(c => c.nombre.toLowerCase().includes(q)).sort((a, b) => (s[b.id] || 0) - (s[a.id] || 0)), s); }
+
+function abrir(id) { S.sel = id; S.vista = 'detalle'; render(); scrollTo(0, 0); }
+
+function vDetalle() {
+  const c = S.cl.find(x => x.id === S.sel); if (!c) { S.vista = 'clientes'; return vClientes(); }
+  const v = saldos()[c.id] || 0;
+  const movs = S.mv.filter(m => m.clienteId === c.id).sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
+  let html = `<button class="btn sec" onclick="S.vista='clientes';render()" style="min-height:40px;padding:4px 14px">‹ Clientes</button>
+  <h1 style="font-size:28px;margin-top:8px">${esc(c.nombre)}</h1>
+  <div class="total"><span>Debe actualmente</span><b>${clp(v)}</b></div>
+  <div class="acciones"><button class="btn rojo" onclick="abrirMov('fiado')">Anotar fiado</button><button class="btn verde" onclick="abrirMov('pago')">Registrar pago</button></div>`;
+  let mes = '';
+  movs.forEach(m => {
+    if (m.mes !== mes) { mes = m.mes; html += `<div class="mes">${nombreMes(mes)}</div>`; }
+    const x = esJefe() && !m.anulado ? ` · <button class="x" onclick="anular('${m.id}')">Anular</button>` : '';
+    html += `<div class="mov ${m.anulado ? 'anul' : ''}"><span>${m.fecha.slice(8)}/${m.fecha.slice(5, 7)} ${esc(m.nota) || (m.tipo === 'fiado' ? 'Fiado' : 'Pago')}<small>${esc(m.usuario)}${m.anulado ? ' · anulado por ' + esc(m.anuladoPor) : ''}${x}</small></span>
+    <b class="num ${m.tipo === 'fiado' ? 'deuda' : ''}" style="${m.tipo === 'pago' ? 'color:var(--pago)' : ''}">${m.tipo === 'fiado' ? '+' : '−'}${clp(m.monto)}</b></div>`;
+  });
+  return html + (movs.length ? '' : '<p style="color:var(--suave)">Sin movimientos todavía.</p>');
+}
+
+function vResumen() {
+  const act = S.mv.filter(m => !m.anulado), s = saldos(), mesAct = hoy().slice(0, 7);
+  const porMes = {};
+  act.forEach(m => { const o = porMes[m.mes] ||= { f: 0, p: 0 }; o[m.tipo === 'fiado' ? 'f' : 'p'] += Number(m.monto); });
+  const meses = Object.keys(porMes).sort().reverse();
+  const deud = S.cl.map(c => [c.nombre, s[c.id] || 0]).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const trab = {}; act.filter(m => m.mes === mesAct && m.tipo === 'fiado').forEach(m => trab[m.usuario] = (trab[m.usuario] || 0) + Number(m.monto));
+  const total = Object.values(s).reduce((a, b) => a + b, 0);
+  const kv = (a, b, c = '') => `<div class="kv"><span>${esc(a)}</span><b class="num ${c}">${b}</b></div>`;
+  return `<div class="total"><span>Pendiente total</span><b>${clp(total)}</b></div>
+  <div class="mes">Por mes</div>${meses.map(m => kv(nombreMes(m) + ' · fiado / pagado', clp(porMes[m].f) + ' / ' + clp(porMes[m].p))).join('') || '<p>Sin datos.</p>'}
+  <div class="mes">Quienes más deben</div>${deud.map(d => kv(d[0], clp(d[1]), 'deuda')).join('') || '<p>Nadie debe nada.</p>'}
+  <div class="mes">Fiado este mes por trabajador</div>${Object.entries(trab).map(t => kv(t[0], clp(t[1]))).join('') || '<p>Sin fiados este mes.</p>'}`;
+}
+
+function vMas() {
+  return `<div class="mes">Sesión</div><p>Conectado como <b>${esc(S.nombre)}</b>.</p>
+  <button class="btn sec" onclick="salir()">Cerrar sesión</button>
+  ${esJefe() ? `<div class="mes">Limpieza anual</div><p style="line-height:1.4">Se guardan los últimos 12 meses. Esto borra los meses más antiguos, solo de clientes que no deben nada.</p>
+  <button class="btn rojo" onclick="purgar()">Borrar meses de más de 12 atrás</button>` : ''}`;
+}
+
+/* Acciones */
+let tipoMov = '';
+function abrirMov(t) { tipoMov = t; $('#dMovT').textContent = t === 'fiado' ? 'Anotar fiado' : 'Registrar pago'; $('#mMonto').value = ''; $('#mNota').value = ''; $('#mFecha').value = hoy(); $('#dMov').showModal(); $('#mMonto').focus(); }
+function abrirCli() { $('#cNom').value = ''; $('#cTel').value = ''; $('#dCli').showModal(); $('#cNom').focus(); }
+
+async function guarda(btn, fn) {
+  btn.disabled = true;
+  try { await fn(); await cargar(); } catch (e) { toast(e.message); }
+  btn.disabled = false;
+}
+$('#mOk').onclick = e => guarda(e.target, async () => {
+  await api('mov', { clienteId: S.sel, tipo: tipoMov, monto: $('#mMonto').value, nota: $('#mNota').value, fecha: $('#mFecha').value });
+  $('#dMov').close(); toast(tipoMov === 'fiado' ? 'Fiado anotado' : 'Pago registrado');
+});
+$('#cOk').onclick = e => guarda(e.target, async () => {
+  const j = await api('cliente', { nombre: $('#cNom').value, telefono: $('#cTel').value });
+  $('#dCli').close(); S.sel = j.id; S.vista = 'detalle'; toast('Cliente agregado');
+});
+async function anular(id) { if (confirm('¿Anular este movimiento? Quedará tachado en el historial, no se borra.')) try { await api('anular', { id }); await cargar(); toast('Movimiento anulado'); } catch (e) { toast(e.message); } }
+async function purgar() { if (confirm('¿Borrar los meses de más de 12 atrás? Esto no se puede deshacer.')) try { const j = await api('purgar'); await cargar(); toast(j.borrados + ' movimientos borrados'); } catch (e) { toast(e.message); } }
+document.querySelectorAll('[data-cerrar]').forEach(b => b.onclick = () => b.closest('dialog').close());
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => { S.vista = b.dataset.v; render(); scrollTo(0, 0); });
+$('#sync').onclick = () => cargar().then(() => toast('Datos actualizados')).catch(e => toast(e.message));
+
+/* Sesión */
+async function entrar() {
+  $('#lerr').textContent = ''; $('#entrar').disabled = true;
+  S.u = $('#u').value.trim(); S.pin = $('#p').value;
+  try {
+    await cargar();
+    try { localStorage.setItem('usuario', S.u); sessionStorage.setItem('pin', S.pin); sessionStorage.setItem('u', S.u); } catch (e) {}
+    $('#login').classList.add('oculto'); $('#app').classList.remove('oculto');
+  } catch (e) { $('#lerr').textContent = e.message; }
+  $('#entrar').disabled = false;
+}
+function salir() { try { sessionStorage.clear(); } catch (e) {} location.reload(); }
+$('#entrar').onclick = entrar;
+$('#p').onkeydown = e => { if (e.key === 'Enter') entrar(); };
+$('#ver').textContent = 'v' + VERSION;
+try { $('#u').value = sessionStorage.getItem('u') || localStorage.getItem('usuario') || ''; const pin = sessionStorage.getItem('pin'); if (pin && $('#u').value) { $('#p').value = pin; entrar(); } } catch (e) {}
+</script>
+</body>
+</html>
