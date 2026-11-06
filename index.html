@@ -102,19 +102,26 @@ dialog h2{margin:0;font-size:18px}
   <label for="cNom">Nombre</label><input id="cNom" autocomplete="off">
   <label for="cTel">Teléfono (para WhatsApp, opcional)</label><input id="cTel" type="tel" inputmode="tel" placeholder="9 1234 5678">
   <div class="fila2"><button class="btn sec" data-cerrar>Cancelar</button><button class="btn" id="cOk">Agregar cliente</button></div></dialog>
-<dialog id="dWa"><h2>Enviar saldo por WhatsApp</h2><p style="color:var(--suave);font-size:14px;margin:4px 0 0">Toca el mensaje que quieres enviar. Se abrirá WhatsApp para que lo revises antes de mandarlo.</p><div id="waLista"></div>
+<dialog id="dWa"><h2 id="dWaT">Enviar saldo por WhatsApp</h2><p style="color:var(--suave);font-size:14px;margin:4px 0 0">Toca el mensaje que quieres enviar. Se abrirá WhatsApp para que lo revises antes de mandarlo.</p><div id="waLista"></div>
   <button class="btn sec" data-cerrar style="width:100%;margin-top:12px">Cancelar</button></dialog>
 <div class="ver" id="ver"></div>
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbxllJBA5Y7-Et9BXc0j89havJ4T8YAtGjqq4L2AiA8x2WZ8kiFO7-zO8HaTa2QkfjHq3Q/exec';
-const VERSION = 2, LOCAL = 'Go!i! coffee';
+const VERSION = 3, LOCAL = 'Go!i! coffee';
 const MENSAJES = [
   '¡Hola {n}! ¿Cómo estás? Te escribimos de {L} para recordarte que tu cuenta tiene un saldo pendiente de {s}. ¡Gracias por tu preferencia!',
   'Hola {n} ☕ Pasamos a avisarte que tu saldo en {L} es de {s}. Cuando puedas, te esperamos por acá. ¡Que tengas un lindo día!',
   'Buenas, {n}. Te contamos que el total de tu cuenta en {L} es {s}. Si ya lo pagaste, ignora este mensaje y disculpa la molestia.',
   '¡Hola {n}! Desde {L} te recordamos amablemente tu saldo pendiente: {s}. Puedes pasar a pagarlo cuando quieras. ¡Gracias!',
   '{n}, ¿cómo va todo? Un recordatorio cordial de {L}: tienes {s} por pagar. Si necesitas coordinar el pago, respóndenos por este chat.'
+];
+const SALDADAS = [
+  '¡Hola {n}! Te escribimos de {L} para confirmarte que tu cuenta está al día. ¡Muchas gracias por tu pago!',
+  'Hola {n} ☕ Tu cuenta en {L} quedó saldada. ¡Gracias por tu preferencia, te esperamos pronto!',
+  'Buenas, {n}. Te avisamos que ya no tienes saldo pendiente en {L}. ¡Gracias por ponerte al día!',
+  '¡Hola {n}! Desde {L} queremos agradecerte: tu cuenta está en cero. ¡Que tengas un excelente día!',
+  '{n}, ¡todo en orden! Tu cuenta en {L} está saldada. Gracias por tu pago y por elegirnos.'
 ];
 const S = { u: '', pin: '', nombre: '', rol: '', cl: [], mv: [], vista: 'clientes', sel: null, filtro: 'all', q: '' };
 const $ = s => document.querySelector(s);
@@ -179,23 +186,24 @@ function pintaDet() {
   const movs = S.mv.filter(m => m.clienteId === c.id).sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
   let h = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div style="display:flex;align-items:center;gap:12px;min-width:0"><span class="av ${d > 0 ? '' : 'ok'}">${esc(iniciales(c.nombre))}</span><div><h2>${esc(c.nombre)}</h2><small style="color:var(--suave)">${esc(c.telefono) || 'Sin teléfono'}</small></div></div><button class="iconbtn" onclick="$('#dDet').close()" aria-label="Cerrar">✕</button></div>
   <div class="panel" style="margin:14px 0;background:var(--surf);display:flex;justify-content:space-between;align-items:center"><div><small style="color:var(--suave)">Saldo pendiente</small><div class="num" style="font-size:26px;font-weight:800;color:var(--bur)">${clp(d)}</div></div><span class="tag ${d > 0 ? 'mal' : 'ok'}">${d > 0 ? 'Con deuda' : 'Al día'}</span></div>
-  <div class="fila2" style="margin:0 0 10px"><button class="btn ok" onclick="abrirMov('pago')">Registrar abono</button><button class="btn" onclick="abrirMov('fiado')">Cargar consumo</button></div>
-  ${c.telefono && d > 0 ? '<button class="btn wa" style="width:100%" onclick="abrirWa()">Enviar saldo por WhatsApp</button>' : ''}`;
+  <div class="fila2" style="margin:0 0 10px"><button class="btn ok" onclick="abrirMov('pago')">Registrar pago</button><button class="btn" onclick="abrirMov('fiado')">Cargar fiado</button></div>
+  ${c.telefono ? `<button class="btn wa" style="width:100%" onclick="abrirWa()">${d > 0 ? 'Enviar saldo por WhatsApp' : 'Avisar por WhatsApp que está al día'}</button>` : ''}`;
   let mes = '';
   movs.forEach(m => {
     if (m.mes !== mes) { mes = m.mes; h += `<div class="mes">${nombreMes(mes)}</div>`; }
     const x = esJefe() && !m.anulado ? ` · <button class="x" onclick="anular('${m.id}')">Anular</button>` : '';
-    h += `<div class="mov ${m.anulado ? 'anul' : ''}"><span>${m.fecha.slice(8)}/${m.fecha.slice(5, 7)} · ${esc(m.nota) || (m.tipo === 'fiado' ? 'Consumo' : 'Abono')}<small>${esc(m.usuario)}${m.anulado ? ' · anulado por ' + esc(m.anuladoPor) : ''}${x}</small></span><b class="num" style="color:${m.tipo === 'pago' ? 'var(--ok)' : 'var(--tinta)'}">${m.tipo === 'fiado' ? '+' : '−'}${clp(m.monto)}</b></div>`;
+    h += `<div class="mov ${m.anulado ? 'anul' : ''}"><span>${m.fecha.slice(8)}/${m.fecha.slice(5, 7)} · ${esc(m.nota) || (m.tipo === 'fiado' ? 'Fiado' : 'Pago')}<small>${esc(m.usuario)}${m.anulado ? ' · anulado por ' + esc(m.anuladoPor) : ''}${x}</small></span><b class="num" style="color:${m.tipo === 'pago' ? 'var(--ok)' : 'var(--tinta)'}">${m.tipo === 'fiado' ? '+' : '−'}${clp(m.monto)}</b></div>`;
   });
   $('#dDet').innerHTML = h + (movs.length ? '' : '<p style="color:var(--suave)">Sin movimientos todavía.</p>');
 }
 
 /* WhatsApp: 5 mensajes; sugiere uno distinto al último enviado a ese cliente */
-function textoWa(i, c, d) { return MENSAJES[i].replace('{n}', c.nombre.split(/\s+/)[0]).replace('{L}', LOCAL).replace('{s}', clp(d)); }
+function textoWa(i, c, d) { return (d > 0 ? MENSAJES : SALDADAS)[i].replace('{n}', c.nombre.split(/\s+/)[0]).replace('{L}', LOCAL).replace('{s}', clp(d)); }
 function abrirWa() {
   const c = S.cl.find(x => x.id === S.sel), d = saldos()[c.id] || 0;
-  let ult = -1; try { ult = +localStorage.getItem('wa:' + c.id); if (isNaN(ult)) ult = -1; } catch (e) {}
-  const sug = (ult + 1 + Math.floor(Math.random() * 4)) % MENSAJES.length; // nunca igual al último
+  let ult = -1; try { ult = +localStorage.getItem((d > 0 ? 'wa:' : 'wo:') + c.id); if (isNaN(ult)) ult = -1; } catch (e) {}
+  const sug = (ult + 1 + Math.floor(Math.random() * 4)) % 5; // nunca igual al último
+  $('#dWaT').textContent = d > 0 ? 'Enviar saldo por WhatsApp' : 'Avisar que la cuenta está al día';
   $('#waLista').innerHTML = MENSAJES.map((_, i) => `<button class="msg" onclick="enviarWa(${i})">${i === sug ? '<em>Sugerido</em><br>' : ''}${esc(textoWa(i, c, d))}</button>`).join('');
   $('#dWa').showModal();
 }
@@ -203,7 +211,7 @@ function enviarWa(i) {
   const c = S.cl.find(x => x.id === S.sel), d = saldos()[c.id] || 0;
   let t = c.telefono.replace(/\D/g, '');
   t = t.startsWith('56') ? t : t.length === 8 ? '569' + t : '56' + t;
-  try { localStorage.setItem('wa:' + c.id, i); } catch (e) {}
+  try { localStorage.setItem((d > 0 ? 'wa:' : 'wo:') + c.id, i); } catch (e) {}
   $('#dWa').close();
   window.open('https://wa.me/' + t + '?text=' + encodeURIComponent(textoWa(i, c, d)), '_blank');
 }
@@ -217,9 +225,9 @@ function vResumen() {
   const total = Object.values(s).reduce((a, b) => a + b, 0);
   const kv = (a, b) => `<div class="kv"><span>${esc(a)}</span><b class="num">${b}</b></div>`;
   return `<div class="hero"><small>Pendiente total</small><b class="num">${clp(total)}</b></div>
-  <div class="panel"><h3>Por mes (consumos / abonos)</h3>${meses.map(m => kv(nombreMes(m), clp(pm[m].f) + ' / ' + clp(pm[m].p))).join('') || '<small>Sin datos.</small>'}</div>
+  <div class="panel"><h3>Por mes (fiados / pagos)</h3>${meses.map(m => kv(nombreMes(m), clp(pm[m].f) + ' / ' + clp(pm[m].p))).join('') || '<small>Sin datos.</small>'}</div>
   <div class="panel"><h3>Quienes más deben</h3>${deud.map(d => kv(d[0], clp(d[1]))).join('') || '<small>Nadie debe nada.</small>'}</div>
-  <div class="panel"><h3>Fiado este mes por trabajador</h3>${Object.entries(tr).map(t => kv(t[0], clp(t[1]))).join('') || '<small>Sin consumos fiados este mes.</small>'}</div>`;
+  <div class="panel"><h3>Fiado este mes por trabajador</h3>${Object.entries(tr).map(t => kv(t[0], clp(t[1]))).join('') || '<small>Sin fiados este mes.</small>'}</div>`;
 }
 function vMas() {
   return `<div class="panel"><h3>Sesión</h3><p style="margin:0 0 12px">Conectado como <b>${esc(S.nombre)}</b>.</p><button class="btn sec" onclick="salir()">Cerrar sesión</button></div>
@@ -228,12 +236,12 @@ function vMas() {
 
 /* Acciones */
 let tipoMov = '';
-function abrirMov(t) { tipoMov = t; $('#dMovT').textContent = t === 'fiado' ? 'Cargar consumo' : 'Registrar abono'; $('#mMonto').value = ''; $('#mNota').value = ''; $('#mFecha').value = hoy(); $('#dMov').showModal(); $('#mMonto').focus(); }
+function abrirMov(t) { tipoMov = t; $('#dMovT').textContent = t === 'fiado' ? 'Cargar fiado' : 'Registrar pago'; $('#mMonto').value = ''; $('#mNota').value = ''; $('#mFecha').value = hoy(); $('#dMov').showModal(); $('#mMonto').focus(); }
 function abrirCli() { $('#cNom').value = ''; $('#cTel').value = ''; $('#dCli').showModal(); $('#cNom').focus(); }
 async function guarda(btn, fn) { btn.disabled = true; try { await fn(); await cargar(); } catch (e) { toast(e.message); } btn.disabled = false; }
 $('#mOk').onclick = e => guarda(e.target, async () => {
   await api('mov', { clienteId: S.sel, tipo: tipoMov, monto: $('#mMonto').value, nota: $('#mNota').value, fecha: $('#mFecha').value });
-  $('#dMov').close(); toast(tipoMov === 'fiado' ? 'Consumo anotado' : 'Abono registrado');
+  $('#dMov').close(); toast(tipoMov === 'fiado' ? 'Fiado anotado' : 'Pago registrado');
 });
 $('#cOk').onclick = e => guarda(e.target, async () => {
   const j = await api('cliente', { nombre: $('#cNom').value, telefono: $('#cTel').value });
