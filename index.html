@@ -72,6 +72,12 @@ dialog h2{margin:0;font-size:18px}
 .msg em{display:inline-block;font-style:normal;font-size:11px;font-weight:800;background:var(--oro);color:#fff;border-radius:6px;padding:1px 7px;margin-bottom:4px}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--tinta);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;max-width:88vw;z-index:99}
 .err{color:var(--mal);min-height:24px;font-size:14px}
+.luz{position:fixed;z-index:60;border-radius:14px;box-shadow:0 0 0 9999px rgba(20,10,12,.72);pointer-events:none;transition:all .25s}
+.tcard{position:fixed;left:50%;transform:translateX(-50%);width:min(92vw,440px);background:var(--blanco);border-radius:18px;padding:16px;z-index:61;box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.tcard h3{margin:0 0 4px;font-size:17px;color:var(--bur)}.tcard p{margin:0;font-size:15px}
+.tcard .pie{display:flex;align-items:center;gap:8px;margin-top:14px}.tcard .pie span{flex:1;font-size:12px;color:var(--suave)}
+.tfondo{position:fixed;inset:0;z-index:59;background:rgba(20,10,12,.72)}
+.demo{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .ver{position:fixed;right:8px;bottom:62px;font-size:10px;opacity:.35}
 </style>
 </head>
@@ -107,8 +113,8 @@ dialog h2{margin:0;font-size:18px}
 <div class="ver" id="ver"></div>
 
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbxllJBA5Y7-Et9BXc0j89havJ4T8YAtGjqq4L2AiA8x2WZ8kiFO7-zO8HaTa2QkfjHq3Q/exec';
-const VERSION = 3, LOCAL = 'Go!i! coffee';
+const API = 'https://script.google.com/macros/s/AKfycbyC-gcSqLZ8eWtr6xNjVWiiHAY9bzjemjo3BR9SmXqS98rdbcFa7FtZg_2pCW22oPH4Wg/exec';
+const VERSION = 4, LOCAL = 'Go!i! coffee';
 const MENSAJES = [
   '¡Hola {n}! ¿Cómo estás? Te escribimos de {L} para recordarte que tu cuenta tiene un saldo pendiente de {s}. ¡Gracias por tu preferencia!',
   'Hola {n} ☕ Pasamos a avisarte que tu saldo en {L} es de {s}. Cuando puedas, te esperamos por acá. ¡Que tengas un lindo día!',
@@ -230,8 +236,46 @@ function vResumen() {
   <div class="panel"><h3>Fiado este mes por trabajador</h3>${Object.entries(tr).map(t => kv(t[0], clp(t[1]))).join('') || '<small>Sin fiados este mes.</small>'}</div>`;
 }
 function vMas() {
-  return `<div class="panel"><h3>Sesión</h3><p style="margin:0 0 12px">Conectado como <b>${esc(S.nombre)}</b>.</p><button class="btn sec" onclick="salir()">Cerrar sesión</button></div>
-  ${esJefe() ? `<div class="panel"><h3>Limpieza anual</h3><p style="margin:0 0 12px;color:var(--suave);font-size:14px">Se guardan los últimos 12 meses. Esto borra los meses más antiguos, solo de clientes que no deben nada.</p><button class="btn" style="background:var(--mal)" onclick="purgar()">Borrar meses de más de 12 atrás</button></div>` : ''}`;
+  return `<div class="panel"><h3>Tutorial</h3><p style="margin:0 0 12px;color:var(--suave);font-size:14px">Un paseo corto por la app que explica cada función paso a paso.</p><button class="btn" onclick="tour()">Comenzar tutorial</button></div>
+  <div class="panel"><h3>Sesión</h3><p style="margin:0 0 12px">Conectado como <b>${esc(S.nombre)}</b>.</p><button class="btn sec" onclick="salir()">Cerrar sesión</button></div>
+  ${esJefe() ? `<div class="panel"><h3>Limpieza de meses antiguos</h3><p style="margin:0 0 12px;color:var(--suave);font-size:14px">Se guardan los últimos 4 meses (el actual y los 3 anteriores). Esto borra lo más antiguo, solo de clientes que no deben nada.</p><button class="btn" style="background:var(--mal)" onclick="purgar()">Borrar meses de más de 4 atrás</button></div>` : ''}`;
+}
+
+
+/* Tutorial guiado */
+const PASOS = [
+  { t: '¡Bienvenido!', x: 'Este paseo te enseña, paso a paso, para qué sirve cada parte de la app. No cambia ningún dato: puedes tocar «Siguiente» con tranquilidad.' },
+  { v: 'clientes', s: '.hero', t: 'Total por cobrar', x: 'Aquí ves cuánto dinero te deben en total. Abajo aparecen cuántos clientes tienen deuda y cuántos están al día.' },
+  { v: 'clientes', s: '.busca', t: 'Buscar y agregar clientes', x: 'Escribe un nombre o teléfono para encontrar a alguien rápido. El botón «+ Cliente» sirve para registrar a una persona nueva la primera vez que fía.' },
+  { v: 'clientes', s: '.chips', t: 'Filtros', x: '«Con deuda» muestra solo a quienes deben plata. «Al día» muestra a quienes ya pagaron todo. «Todos» muestra la lista completa.' },
+  { v: 'clientes', s: '.card', t: 'La ficha de cada cliente', x: 'Toca un cliente para abrir su ficha. Ahí está todo lo suyo: cuánto debe y su historial día por día.', alt: 'Cuando agregues tu primer cliente, tócalo para abrir su ficha: ahí está cuánto debe y su historial día por día.' },
+  { v: 'clientes', t: 'Cargar fiado y registrar pago', x: 'Dentro de la ficha hay dos botones. Usa «Cargar fiado» cuando el cliente se lleva algo sin pagar, y «Registrar pago» cuando paga todo o una parte.', demo: '<button class="btn">Cargar fiado</button><button class="btn ok">Registrar pago</button>' },
+  { v: 'clientes', t: 'Avisar por WhatsApp', x: 'Si el cliente tiene teléfono, la ficha muestra este botón. Te deja elegir entre 5 mensajes ya escritos para cobrar con amabilidad, o para avisar que su cuenta quedó al día. Antes de enviarlo, WhatsApp te lo muestra para que lo revises.', demo: '<button class="btn wa">Enviar saldo por WhatsApp</button>' },
+  { v: 'clientes', s: '#sync', t: 'Actualizar', x: 'Si otra persona del equipo anotó algo, toca «Actualizar» para ver sus cambios en tu teléfono.' },
+  { v: 'resumen', s: '[data-v=resumen]', t: 'Resumen', x: 'Aquí ves cuánto se fió y cuánto se pagó cada mes, quiénes deben más y cuánto ha anotado cada trabajador.', jefe: 1 },
+  { v: 'clientes', t: 'Anular un movimiento', x: 'Si alguien se equivocó, en la ficha del cliente toca «Anular» junto al movimiento. No se borra: queda tachado, con el nombre de quién lo anuló.', jefe: 1, demo: '<span class="mov anul" style="margin:0">12/11 · Café · $2.500</span><span style="font-size:12px;color:var(--mal);text-decoration:underline">Anular</span>' },
+  { v: 'mas', s: '[data-v=mas]', t: 'La sección «Más»', x: 'Aquí está este tutorial, el botón para cerrar sesión y, solo para jefes, la limpieza de meses antiguos que borra lo de hace más de 4 meses de clientes que no deben nada.', jefe: 1 },
+  { v: 'mas', s: '[data-v=mas]', t: 'La sección «Más»', x: 'Aquí encuentras este tutorial y el botón para cerrar sesión cuando termines de usar la app.' },
+  { t: '¡Listo!', x: 'Ya conoces lo esencial. Cuando quieras repetirlo, vuelve a «Más» y toca «Comenzar tutorial».' }
+];
+let tI = 0, tL = [];
+function tour() { tL = PASOS.filter(p => esJefe() ? !(p.jefe === undefined && p.t === 'La sección «Más»' && p.x.startsWith('Aquí encuentras')) : !p.jefe); tI = 0; tPaso(); }
+function tFin() { ['.luz', '.tcard', '.tfondo'].forEach(s => document.querySelectorAll(s).forEach(e => e.remove())); S.vista = 'mas'; render(); scrollTo(0, 0); }
+function tPaso() {
+  ['.luz', '.tcard', '.tfondo'].forEach(s => document.querySelectorAll(s).forEach(e => e.remove()));
+  const p = tL[tI];
+  if (p.v && p.v !== S.vista) { S.vista = p.v; render(); }
+  const el = p.s ? document.querySelector(p.s) : null;
+  if (el) el.scrollIntoView({ block: 'center' });
+  const card = document.createElement('div'); card.className = 'tcard'; card.setAttribute('role', 'dialog');
+  card.innerHTML = `<h3>${p.t}</h3><p>${el || !p.alt ? p.x : p.alt}</p>${p.demo ? `<div class="demo">${p.demo}</div>` : ''}<div class="pie"><span>${tI + 1} de ${tL.length}</span><button class="btn sec" onclick="tFin()">Salir</button>${tI ? '<button class="btn sec" onclick="tI--;tPaso()">Anterior</button>' : ''}<button class="btn" onclick="${tI < tL.length - 1 ? 'tI++;tPaso()' : 'tFin()'}">${tI < tL.length - 1 ? 'Siguiente' : 'Terminar'}</button></div>`;
+  if (el) {
+    const r = el.getBoundingClientRect(), l = document.createElement('div'); l.className = 'luz';
+    Object.assign(l.style, { left: r.left - 6 + 'px', top: r.top - 6 + 'px', width: r.width + 12 + 'px', height: r.height + 12 + 'px' });
+    document.body.append(l);
+    card.style[r.top + r.height / 2 > innerHeight * .5 ? 'top' : 'bottom'] = r.top + r.height / 2 > innerHeight * .5 ? '16px' : '16px';
+  } else { const f = document.createElement('div'); f.className = 'tfondo'; document.body.append(f); card.style.top = '50%'; card.style.transform = 'translate(-50%,-50%)'; }
+  document.body.append(card);
 }
 
 /* Acciones */
@@ -248,7 +292,7 @@ $('#cOk').onclick = e => guarda(e.target, async () => {
   $('#dCli').close(); S.sel = j.id; S.abrir = true; toast('Cliente agregado');
 });
 async function anular(id) { if (confirm('¿Anular este movimiento? Quedará tachado en el historial, no se borra.')) try { await api('anular', { id }); await cargar(); toast('Movimiento anulado'); } catch (e) { toast(e.message); } }
-async function purgar() { if (confirm('¿Borrar los meses de más de 12 atrás? Esto no se puede deshacer.')) try { const j = await api('purgar'); await cargar(); toast(j.borrados + ' movimientos borrados'); } catch (e) { toast(e.message); } }
+async function purgar() { if (confirm('¿Borrar los movimientos de más de 4 meses atrás? Solo se borran los de clientes sin deuda. Esto no se puede deshacer.')) try { const j = await api('purgar'); await cargar(); toast(j.borrados + ' movimientos borrados'); } catch (e) { toast(e.message); } }
 document.querySelectorAll('[data-cerrar]').forEach(b => b.onclick = () => b.closest('dialog').close());
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => { S.vista = b.dataset.v; render(); scrollTo(0, 0); });
 $('#sync').onclick = () => cargar().then(() => toast('Datos actualizados')).catch(e => toast(e.message));
