@@ -114,7 +114,7 @@ dialog h2{margin:0;font-size:18px}
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbyC-gcSqLZ8eWtr6xNjVWiiHAY9bzjemjo3BR9SmXqS98rdbcFa7FtZg_2pCW22oPH4Wg/exec';
-const VERSION = 4, LOCAL = 'Go!i! coffee';
+const VERSION = 5, LOCAL = 'Go!i! coffee';
 const MENSAJES = [
   '¡Hola {n}! ¿Cómo estás? Te escribimos de {L} para recordarte que tu cuenta tiene un saldo pendiente de {s}. ¡Gracias por tu preferencia!',
   'Hola {n} ☕ Pasamos a avisarte que tu saldo en {L} es de {s}. Cuando puedas, te esperamos por acá. ¡Que tengas un lindo día!',
@@ -238,7 +238,7 @@ function vResumen() {
 function vMas() {
   return `<div class="panel"><h3>Tutorial</h3><p style="margin:0 0 12px;color:var(--suave);font-size:14px">Un paseo corto por la app que explica cada función paso a paso.</p><button class="btn" onclick="tour()">Comenzar tutorial</button></div>
   <div class="panel"><h3>Sesión</h3><p style="margin:0 0 12px">Conectado como <b>${esc(S.nombre)}</b>.</p><button class="btn sec" onclick="salir()">Cerrar sesión</button></div>
-  ${esJefe() ? `<div class="panel"><h3>Limpieza de meses antiguos</h3><p style="margin:0 0 12px;color:var(--suave);font-size:14px">Se guardan los últimos 4 meses (el actual y los 3 anteriores). Esto borra lo más antiguo, solo de clientes que no deben nada.</p><button class="btn" style="background:var(--mal)" onclick="purgar()">Borrar meses de más de 4 atrás</button></div>` : ''}`;
+  ${esJefe() ? `<div class="panel"><h3>Limpieza de meses antiguos</h3><p style="margin:0 0 12px;color:var(--suave);font-size:14px">Se guardan los últimos 4 meses (el actual y los 3 anteriores). Esto borra solo lo antiguo que ya está saldado entre sí (un fiado viejo y su pago, ambos de hace más de 4 meses). Las deudas que siguen vivas no se tocan.</p><button class="btn" style="background:var(--mal)" onclick="purgar()">Borrar meses de más de 4 atrás</button></div>` : ''}`;
 }
 
 
@@ -254,7 +254,7 @@ const PASOS = [
   { v: 'clientes', s: '#sync', t: 'Actualizar', x: 'Si otra persona del equipo anotó algo, toca «Actualizar» para ver sus cambios en tu teléfono.' },
   { v: 'resumen', s: '[data-v=resumen]', t: 'Resumen', x: 'Aquí ves cuánto se fió y cuánto se pagó cada mes, quiénes deben más y cuánto ha anotado cada trabajador.', jefe: 1 },
   { v: 'clientes', t: 'Anular un movimiento', x: 'Si alguien se equivocó, en la ficha del cliente toca «Anular» junto al movimiento. No se borra: queda tachado, con el nombre de quién lo anuló.', jefe: 1, demo: '<span class="mov anul" style="margin:0">12/11 · Café · $2.500</span><span style="font-size:12px;color:var(--mal);text-decoration:underline">Anular</span>' },
-  { v: 'mas', s: '[data-v=mas]', t: 'La sección «Más»', x: 'Aquí está este tutorial, el botón para cerrar sesión y, solo para jefes, la limpieza de meses antiguos que borra lo de hace más de 4 meses de clientes que no deben nada.', jefe: 1 },
+  { v: 'mas', s: '[data-v=mas]', t: 'La sección «Más»', x: 'Aquí está este tutorial, el botón para cerrar sesión y, solo para jefes, la limpieza de meses antiguos que borra lo de hace más de 4 meses que ya está saldado, sin tocar las deudas vivas.', jefe: 1 },
   { v: 'mas', s: '[data-v=mas]', t: 'La sección «Más»', x: 'Aquí encuentras este tutorial y el botón para cerrar sesión cuando termines de usar la app.' },
   { t: '¡Listo!', x: 'Ya conoces lo esencial. Cuando quieras repetirlo, vuelve a «Más» y toca «Comenzar tutorial».' }
 ];
@@ -292,7 +292,7 @@ $('#cOk').onclick = e => guarda(e.target, async () => {
   $('#dCli').close(); S.sel = j.id; S.abrir = true; toast('Cliente agregado');
 });
 async function anular(id) { if (confirm('¿Anular este movimiento? Quedará tachado en el historial, no se borra.')) try { await api('anular', { id }); await cargar(); toast('Movimiento anulado'); } catch (e) { toast(e.message); } }
-async function purgar() { if (confirm('¿Borrar los movimientos de más de 4 meses atrás? Solo se borran los de clientes sin deuda. Esto no se puede deshacer.')) try { const j = await api('purgar'); await cargar(); toast(j.borrados + ' movimientos borrados'); } catch (e) { toast(e.message); } }
+async function purgar() { if (confirm('¿Borrar los movimientos de más de 4 meses atrás? Solo se borran los antiguos que ya están saldados entre sí. Esto no se puede deshacer.')) try { const j = await api('purgar'); await cargar(); toast(j.borrados + ' movimientos borrados' + (j.conservados ? ' · ' + j.conservados + ' cliente(s) con algo viejo sin saldar se conservó' : '')); } catch (e) { toast(e.message); } }
 document.querySelectorAll('[data-cerrar]').forEach(b => b.onclick = () => b.closest('dialog').close());
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => { S.vista = b.dataset.v; render(); scrollTo(0, 0); });
 $('#sync').onclick = () => cargar().then(() => toast('Datos actualizados')).catch(e => toast(e.message));
