@@ -78,6 +78,8 @@ dialog h2{margin:0;font-size:18px}
 .tcard .pie{display:flex;align-items:center;gap:8px;margin-top:14px}.tcard .pie span{flex:1;font-size:12px;color:var(--suave)}
 .tfondo{position:fixed;inset:0;z-index:59;background:rgba(20,10,12,.72)}
 .demo{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn.rojo{background:var(--mal)}.btn.am{background:#F2B705;color:#2B1A1C}.tag.am{background:#FFF4CC;color:#7A5600}
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 10px}.trio .btn{white-space:normal;padding:8px 6px;font-size:14px;line-height:1.2;min-height:54px}
 .ver{position:fixed;right:8px;bottom:62px;font-size:10px;opacity:.35}
 </style>
 </head>
@@ -110,11 +112,15 @@ dialog h2{margin:0;font-size:18px}
   <div class="fila2"><button class="btn sec" data-cerrar>Cancelar</button><button class="btn" id="cOk">Agregar cliente</button></div></dialog>
 <dialog id="dWa"><h2 id="dWaT">Enviar saldo por WhatsApp</h2><p style="color:var(--suave);font-size:14px;margin:4px 0 0">Toca el mensaje que quieres enviar. Se abrirá WhatsApp para que lo revises antes de mandarlo.</p><div id="waLista"></div>
   <button class="btn sec" data-cerrar style="width:100%;margin-top:12px">Cancelar</button></dialog>
+<dialog id="dEd"><h2>Editar cliente</h2>
+  <label for="eNom">Nombre</label><input id="eNom" autocomplete="off">
+  <label for="eTel">Teléfono (para WhatsApp)</label><input id="eTel" type="tel" inputmode="tel" placeholder="9 1234 5678">
+  <div class="fila2"><button class="btn sec" data-cerrar>Cancelar</button><button class="btn" id="eOk">Guardar cambios</button></div></dialog>
 <div class="ver" id="ver"></div>
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbyC-gcSqLZ8eWtr6xNjVWiiHAY9bzjemjo3BR9SmXqS98rdbcFa7FtZg_2pCW22oPH4Wg/exec';
-const VERSION = 5, LOCAL = 'Go!i! coffee';
+const VERSION = 6, LOCAL = 'Go!i! coffee';
 const MENSAJES = [
   '¡Hola {n}! ¿Cómo estás? Te escribimos de {L} para recordarte que tu cuenta tiene un saldo pendiente de {s}. ¡Gracias por tu preferencia!',
   'Hola {n} ☕ Pasamos a avisarte que tu saldo en {L} es de {s}. Cuando puedas, te esperamos por acá. ¡Que tengas un lindo día!',
@@ -153,11 +159,34 @@ async function cargar() {
   render();
   if (S.abrir) { S.abrir = false; abrirDet(S.sel); }
 }
-function saldos() {
-  const m = {};
-  S.mv.filter(x => !x.anulado).forEach(x => m[x.clienteId] = (m[x.clienteId] || 0) + (x.tipo === 'fiado' ? 1 : -1) * Number(x.monto));
-  return m;
+const VIGENCIA = 14; // días que un pendiente sigue siendo «pendiente»; después pasa solo a fiado
+function dias(a, b) { return Math.floor((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 864e5); }
+/* Reparto por cliente, en orden cronológico: cada pago descuenta primero lo pendiente y después el fiado
+   (lo más antiguo primero dentro de cada grupo). El total siempre es fiados − pagos, igual que antes. */
+function cuentas() {
+  const por = {}, res = {}, hs = hoy(), rango = m => m.tipo === 'fiado' ? 0 : 1;
+  S.mv.filter(x => !x.anulado).forEach(x => (por[x.clienteId] ||= []).push(x));
+  Object.entries(por).forEach(([id, ms]) => {
+    ms.sort((a, b) => a.fecha.localeCompare(b.fecha) || rango(a) - rango(b) || a.hora.localeCompare(b.hora));
+    let lotes = [], cred = 0;
+    ms.forEach(m => {
+      let v = Number(m.monto);
+      if (m.tipo === 'fiado') {
+        const u = Math.min(cred, v); cred -= u; v -= u;
+        if (v > 0) lotes.push({ pend: m.categoria === 'pendiente', f: m.fecha, r: v });
+      } else {
+        const esP = l => l.pend && dias(l.f, m.fecha) < VIGENCIA;
+        [...lotes.filter(esP), ...lotes.filter(l => !esP(l))].forEach(l => { const u = Math.min(l.r, v); l.r -= u; v -= u; });
+        cred += v; lotes = lotes.filter(l => l.r > 0);
+      }
+    });
+    let p = 0, f = 0;
+    lotes.forEach(l => { if (l.pend && dias(l.f, hs) < VIGENCIA) p += l.r; else f += l.r; });
+    res[id] = { f, p, t: f + p - cred };
+  });
+  return res;
 }
+function saldos() { const c = cuentas(), m = {}; Object.keys(c).forEach(k => m[k] = c[k].t); return m; }
 function render() {
   $('#quien').textContent = S.nombre + ' · ' + { jefe: 'Jefe', empleado: 'Empleado', dev: 'Desarrollo' }[S.rol];
   $('#banda').classList.toggle('oculto', S.rol !== 'dev');
@@ -167,38 +196,49 @@ function render() {
   if ($('#dDet').open) pintaDet();
 }
 
+const SIN = { f: 0, p: 0, t: 0 };
 function vClientes() {
-  const s = saldos(), v = Object.values(s);
-  const total = v.reduce((a, b) => a + b, 0), con = v.filter(x => x > 0).length, alDia = S.cl.length - con;
+  const c = cuentas(), v = Object.values(c);
+  const total = v.reduce((a, b) => a + b.t, 0), tf = v.reduce((a, b) => a + b.f, 0), tp = v.reduce((a, b) => a + b.p, 0);
+  const con = v.filter(x => x.t > 0).length, alDia = S.cl.length - con;
   const ch = [['all', 'Todos'], ['deuda', 'Con deuda'], ['aldia', 'Al día']].map(([k, t]) => `<button class="chip ${S.filtro === k ? 'on' : ''}" onclick="S.filtro='${k}';render()">${t}</button>`).join('');
   return `<div class="hero"><small>Total por cobrar</small><b class="num">${clp(total)}</b>
-  <div class="mini"><div>Con saldo pendiente<strong>${con} cliente${con !== 1 ? 's' : ''}</strong></div><div>Cuentas al día<strong>${alDia} cliente${alDia !== 1 ? 's' : ''}</strong></div></div></div>
+  <div class="mini"><div>Fiado (fin de mes)<strong>${clp(tf)}</strong></div><div>Pendiente (pago pronto)<strong>${clp(tp)}</strong></div></div>
+  <small style="display:block;margin-top:10px;text-transform:none;letter-spacing:0">${con} cliente${con !== 1 ? 's' : ''} con deuda · ${alDia} al día</small></div>
   <div class="busca"><input id="q" placeholder="Buscar por nombre o teléfono" value="${esc(S.q)}" oninput="S.q=this.value;pintaLista()" aria-label="Buscar cliente"><button class="btn" onclick="abrirCli()">+ Cliente</button></div>
-  <div class="chips">${ch}</div><div id="lista">${filas(s)}</div>`;
+  <div class="chips">${ch}</div><div id="lista">${filas(c)}</div>`;
 }
-function filas(s) {
-  const q = S.q.toLowerCase().trim();
-  const l = S.cl.filter(c => (c.nombre.toLowerCase().includes(q) || c.telefono.includes(q)) && (S.filtro === 'all' || (S.filtro === 'deuda') === ((s[c.id] || 0) > 0)))
-    .sort((a, b) => (s[b.id] || 0) - (s[a.id] || 0) || a.nombre.localeCompare(b.nombre));
+function filas(c) {
+  const q = S.q.toLowerCase().trim(), T = id => (c[id] || SIN).t;
+  const l = S.cl.filter(x => (x.nombre.toLowerCase().includes(q) || x.telefono.includes(q)) && (S.filtro === 'all' || (S.filtro === 'deuda') === (T(x.id) > 0)))
+    .sort((a, b) => T(b.id) - T(a.id) || a.nombre.localeCompare(b.nombre));
   if (!l.length) return `<div class="panel" style="text-align:center;color:var(--suave)">${S.cl.length ? 'No se encontraron clientes.' : 'Aún no hay clientes. Toca «+ Cliente» para agregar el primero.'}</div>`;
-  return l.map(c => { const d = s[c.id] || 0; return `<button class="card" onclick="abrirDet('${c.id}')"><span class="l"><span class="av ${d > 0 ? '' : 'ok'}">${esc(iniciales(c.nombre))}</span><span><h4>${esc(c.nombre)}</h4><small>${esc(c.telefono) || 'Sin teléfono'}</small></span></span><span class="tag ${d > 0 ? 'mal' : 'ok'} num">${d > 0 ? 'Debe ' + clp(d) : 'Al día'}</span></button>`; }).join('');
+  return l.map(x => {
+    const d = c[x.id] || SIN;
+    const tags = d.t > 0 ? (d.f > 0 ? `<span class="tag mal num">Fiado ${clp(d.f)}</span>` : '') + (d.p > 0 ? `<span class="tag am num">Pendiente ${clp(d.p)}</span>` : '') : '<span class="tag ok">Al día</span>';
+    return `<button class="card" onclick="abrirDet('${x.id}')"><span class="l"><span class="av ${d.t > 0 ? '' : 'ok'}">${esc(iniciales(x.nombre))}</span><span><h4>${esc(x.nombre)}</h4><small>${esc(x.telefono) || 'Sin teléfono'}</small></span></span><span style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">${tags}</span></button>`;
+  }).join('');
 }
-function pintaLista() { $('#lista').innerHTML = filas(saldos()); }
+function pintaLista() { $('#lista').innerHTML = filas(cuentas()); }
 
 function abrirDet(id) { S.sel = id; pintaDet(); $('#dDet').showModal(); }
 function pintaDet() {
   const c = S.cl.find(x => x.id === S.sel); if (!c) { $('#dDet').close(); return; }
-  const d = saldos()[c.id] || 0;
+  const d = cuentas()[c.id] || SIN, hs = hoy();
   const movs = S.mv.filter(m => m.clienteId === c.id).sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
-  let h = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div style="display:flex;align-items:center;gap:12px;min-width:0"><span class="av ${d > 0 ? '' : 'ok'}">${esc(iniciales(c.nombre))}</span><div><h2>${esc(c.nombre)}</h2><small style="color:var(--suave)">${esc(c.telefono) || 'Sin teléfono'}</small></div></div><button class="iconbtn" onclick="$('#dDet').close()" aria-label="Cerrar">✕</button></div>
-  <div class="panel" style="margin:14px 0;background:var(--surf);display:flex;justify-content:space-between;align-items:center"><div><small style="color:var(--suave)">Saldo pendiente</small><div class="num" style="font-size:26px;font-weight:800;color:var(--bur)">${clp(d)}</div></div><span class="tag ${d > 0 ? 'mal' : 'ok'}">${d > 0 ? 'Con deuda' : 'Al día'}</span></div>
-  <div class="fila2" style="margin:0 0 10px"><button class="btn ok" onclick="abrirMov('pago')">Registrar pago</button><button class="btn" onclick="abrirMov('fiado')">Cargar fiado</button></div>
-  ${c.telefono ? `<button class="btn wa" style="width:100%" onclick="abrirWa()">${d > 0 ? 'Enviar saldo por WhatsApp' : 'Avisar por WhatsApp que está al día'}</button>` : ''}`;
+  const ed = esJefe() || !c.telefono ? '<button class="iconbtn" onclick="abrirEd()" aria-label="Editar cliente">✎</button>' : '';
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div style="display:flex;align-items:center;gap:12px;min-width:0"><span class="av ${d.t > 0 ? '' : 'ok'}">${esc(iniciales(c.nombre))}</span><div><h2>${esc(c.nombre)}</h2><small style="color:var(--suave)">${esc(c.telefono) || 'Sin teléfono'}</small></div></div><div style="display:flex;gap:8px">${ed}<button class="iconbtn" onclick="$('#dDet').close()" aria-label="Cerrar">✕</button></div></div>
+  <div class="panel" style="margin:14px 0;background:var(--surf)"><small style="color:var(--suave)">Saldo total</small><div class="num" style="font-size:28px;font-weight:800;color:var(--bur)">${clp(d.t)}</div>
+  <div class="fila2" style="margin:10px 0 0"><div><small style="color:var(--suave)">Fiado</small><div class="num" style="font-weight:800;color:var(--mal)">${clp(d.f)}</div></div><div><small style="color:var(--suave)">Pendiente</small><div class="num" style="font-weight:800;color:#9A6B00">${clp(d.p)}</div></div></div></div>
+  <div class="trio"><button class="btn ok" onclick="abrirMov('pago')">Registrar pago</button><button class="btn am" onclick="abrirMov('pendiente')">Cargar pendiente</button><button class="btn rojo" onclick="abrirMov('fiado')">Cargar fiado</button></div>
+  ${c.telefono ? `<button class="btn wa" style="width:100%" onclick="abrirWa()">${d.t > 0 ? 'Enviar saldo por WhatsApp' : 'Avisar por WhatsApp que está al día'}</button>` : ''}`;
   let mes = '';
   movs.forEach(m => {
     if (m.mes !== mes) { mes = m.mes; h += `<div class="mes">${nombreMes(mes)}</div>`; }
+    const pend = m.tipo === 'fiado' && m.categoria === 'pendiente', vence = pend && dias(m.fecha, hs) >= VIGENCIA;
+    const et = m.tipo === 'pago' ? 'Pago' : pend ? (vence ? 'pasó a fiado' : 'Pendiente') : 'Fiado';
     const x = esJefe() && !m.anulado ? ` · <button class="x" onclick="anular('${m.id}')">Anular</button>` : '';
-    h += `<div class="mov ${m.anulado ? 'anul' : ''}"><span>${m.fecha.slice(8)}/${m.fecha.slice(5, 7)} · ${esc(m.nota) || (m.tipo === 'fiado' ? 'Fiado' : 'Pago')}<small>${esc(m.usuario)}${m.anulado ? ' · anulado por ' + esc(m.anuladoPor) : ''}${x}</small></span><b class="num" style="color:${m.tipo === 'pago' ? 'var(--ok)' : 'var(--tinta)'}">${m.tipo === 'fiado' ? '+' : '−'}${clp(m.monto)}</b></div>`;
+    h += `<div class="mov ${m.anulado ? 'anul' : ''}"><span>${m.fecha.slice(8)}/${m.fecha.slice(5, 7)} · ${esc(m.nota) || (pend ? 'Pendiente' : m.tipo === 'fiado' ? 'Fiado' : 'Pago')}<small>${esc(m.usuario)} · ${et}${m.anulado ? ' · anulado por ' + esc(m.anuladoPor) : ''}${x}</small></span><b class="num" style="color:${m.tipo === 'pago' ? 'var(--ok)' : pend && !vence ? '#9A6B00' : 'var(--tinta)'}">${m.tipo === 'fiado' ? '+' : '−'}${clp(m.monto)}</b></div>`;
   });
   $('#dDet').innerHTML = h + (movs.length ? '' : '<p style="color:var(--suave)">Sin movimientos todavía.</p>');
 }
@@ -249,7 +289,8 @@ const PASOS = [
   { v: 'clientes', s: '.busca', t: 'Buscar y agregar clientes', x: 'Escribe un nombre o teléfono para encontrar a alguien rápido. El botón «+ Cliente» sirve para registrar a una persona nueva la primera vez que fía.' },
   { v: 'clientes', s: '.chips', t: 'Filtros', x: '«Con deuda» muestra solo a quienes deben plata. «Al día» muestra a quienes ya pagaron todo. «Todos» muestra la lista completa.' },
   { v: 'clientes', s: '.card', t: 'La ficha de cada cliente', x: 'Toca un cliente para abrir su ficha. Ahí está todo lo suyo: cuánto debe y su historial día por día.', alt: 'Cuando agregues tu primer cliente, tócalo para abrir su ficha: ahí está cuánto debe y su historial día por día.' },
-  { v: 'clientes', t: 'Cargar fiado y registrar pago', x: 'Dentro de la ficha hay dos botones. Usa «Cargar fiado» cuando el cliente se lleva algo sin pagar, y «Registrar pago» cuando paga todo o una parte.', demo: '<button class="btn">Cargar fiado</button><button class="btn ok">Registrar pago</button>' },
+  { v: 'clientes', t: 'Los tres botones', x: 'Dentro de la ficha hay tres botones. «Cargar fiado» (rojo) es para lo que se paga a fin de mes. «Cargar pendiente» (amarillo) es para lo que pagarán pronto; si pasan dos semanas, pasa solo a fiado. «Registrar pago» (verde) descuenta primero lo pendiente y después el fiado.', demo: '<button class="btn ok">Registrar pago</button><button class="btn am">Cargar pendiente</button><button class="btn rojo">Cargar fiado</button>' },
+  { v: 'clientes', t: 'Editar un cliente', x: 'En la ficha, el lápiz ✎ permite corregir el nombre o agregar el teléfono si faltaba. Los empleados pueden agregar un teléfono; solo los jefes cambian nombres.', demo: '<button class="iconbtn">✎</button>' },
   { v: 'clientes', t: 'Avisar por WhatsApp', x: 'Si el cliente tiene teléfono, la ficha muestra este botón. Te deja elegir entre 5 mensajes ya escritos para cobrar con amabilidad, o para avisar que su cuenta quedó al día. Antes de enviarlo, WhatsApp te lo muestra para que lo revises.', demo: '<button class="btn wa">Enviar saldo por WhatsApp</button>' },
   { v: 'clientes', s: '#sync', t: 'Actualizar', x: 'Si otra persona del equipo anotó algo, toca «Actualizar» para ver sus cambios en tu teléfono.' },
   { v: 'resumen', s: '[data-v=resumen]', t: 'Resumen', x: 'Aquí ves cuánto se fió y cuánto se pagó cada mes, quiénes deben más y cuánto ha anotado cada trabajador.', jefe: 1 },
@@ -279,13 +320,23 @@ function tPaso() {
 }
 
 /* Acciones */
-let tipoMov = '';
-function abrirMov(t) { tipoMov = t; $('#dMovT').textContent = t === 'fiado' ? 'Cargar fiado' : 'Registrar pago'; $('#mMonto').value = ''; $('#mNota').value = ''; $('#mFecha').value = hoy(); $('#dMov').showModal(); $('#mMonto').focus(); }
+let tipoMov = '', catMov = '';
+function abrirMov(t) { tipoMov = t === 'pago' ? 'pago' : 'fiado'; catMov = t === 'pendiente' ? 'pendiente' : 'fiado'; $('#dMovT').textContent = { pago: 'Registrar pago', pendiente: 'Cargar pendiente', fiado: 'Cargar fiado' }[t]; $('#mMonto').value = ''; $('#mNota').value = ''; $('#mFecha').value = hoy(); $('#dMov').showModal(); $('#mMonto').focus(); }
+function abrirEd() {
+  const c = S.cl.find(x => x.id === S.sel);
+  $('#eNom').value = c.nombre; $('#eTel').value = c.telefono;
+  $('#eNom').disabled = !esJefe(); $('#eTel').disabled = !esJefe() && !!c.telefono;
+  $('#dEd').showModal(); (esJefe() ? $('#eNom') : $('#eTel')).focus();
+}
 function abrirCli() { $('#cNom').value = ''; $('#cTel').value = ''; $('#dCli').showModal(); $('#cNom').focus(); }
 async function guarda(btn, fn) { btn.disabled = true; try { await fn(); await cargar(); } catch (e) { toast(e.message); } btn.disabled = false; }
 $('#mOk').onclick = e => guarda(e.target, async () => {
-  await api('mov', { clienteId: S.sel, tipo: tipoMov, monto: $('#mMonto').value, nota: $('#mNota').value, fecha: $('#mFecha').value });
-  $('#dMov').close(); toast(tipoMov === 'fiado' ? 'Fiado anotado' : 'Pago registrado');
+  await api('mov', { clienteId: S.sel, tipo: tipoMov, categoria: catMov, monto: $('#mMonto').value, nota: $('#mNota').value, fecha: $('#mFecha').value });
+  $('#dMov').close(); toast(tipoMov === 'pago' ? 'Pago registrado' : catMov === 'pendiente' ? 'Pendiente anotado' : 'Fiado anotado');
+});
+$('#eOk').onclick = e => guarda(e.target, async () => {
+  await api('editarCliente', { clienteId: S.sel, nombre: $('#eNom').value, telefono: $('#eTel').value });
+  $('#dEd').close(); toast('Cliente actualizado');
 });
 $('#cOk').onclick = e => guarda(e.target, async () => {
   const j = await api('cliente', { nombre: $('#cNom').value, telefono: $('#cTel').value });
